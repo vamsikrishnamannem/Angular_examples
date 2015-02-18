@@ -1,0 +1,314 @@
+<html>
+<head>
+  <title>Wijmo Grid - Angular Directive Example</title>
+
+  <!-- jQuery -->
+  <script type='text/javascript' src='http://code.jquery.com/jquery-1.8.3.js'></script>
+  <script type="text/javascript" src="http://code.jquery.com/ui/1.9.2/jquery-ui.js"></script>
+  <link rel="stylesheet" type="text/css" href="http://code.jquery.com/ui/1.9.2/themes/base/jquery-ui.css">
+
+  <!-- Angular -->
+  <script type='text/javascript' src="http://code.angularjs.org/angular-1.0.1.js"></script>
+  <link rel="stylesheet" type="text/css" href="http://cdn.wijmo.com/jquery.wijmo-pro.all.3.20132.8.min.css">
+
+  <!-- Wijmo -->
+  <script type='text/javascript' src="http://cdn.wijmo.com/jquery.wijmo-open.all.3.20132.8.min.js"></script>
+  <script type='text/javascript' src="http://cdn.wijmo.com/jquery.wijmo-pro.all.3.20132.8.min.js"></script>
+  <link rel="stylesheet" type="text/css" href="http://cdn.wijmo.com/themes/metro/jquery-wijmo.css">
+
+  <!-- Bootstrap -->
+  <link rel="stylesheet" type="text/css" href="http://netdna.bootstrapcdn.com/twitter-bootstrap/2.3.1/css/bootstrap-combined.min.css">
+
+  <!-- match Wijmo-Bootstrap styles -->  
+  <style type='text/css'>
+    .ui-widget { font-family:'Helvetica Neue', Helvetica, Arial, sans-serif; }
+    .ui-widget input, .ui-widget select, .ui-widget textarea, .ui-widget button { font-family:'Helvetica Neue', Helvetica, Arial, sans-serif; }
+    .wijmo-wijmenu .wijmo-wijmenu-parent .wijmo-wijmenu-child { width: auto; min-width: 150px; }
+    .wijmo-wijtooltip { background-color: #fff9d1; }
+  </style>
+
+  <!-- App code (in real apps, this would be placed in separate files) -->
+  <script type='text/javascript'>//<![CDATA[
+
+// the module
+var app = angular.module("app", []);
+
+// the controller
+app.controller('myCtrl', function ($scope) {
+
+    // generate some data
+    $scope.data = [];
+    var countries = ["US", "Germany", "UK", "Japan", "Italy"];
+    var products = ["Widget", "Gadget", "Doohickey" ];
+    for (var c = 0; c < countries.length; c++) {
+        for (var p = 0; p < products.length; p++) {
+            var item = { 
+                country: countries[c],
+                product: products[p],
+                amount: 1000 + Math.random() * 10000
+            };
+            $scope.data.push(item);
+        }
+    }
+    
+    // handle cell edits
+    $scope.cellEdited = function(e, args) {
+        alert("Cell (" + args.cell.rowIndex() + ", " + args.cell.cellIndex() +") has been edited.");
+    }
+    
+    // change all amounts to show that the binding works
+    $scope.changeAmount = function() {
+        for (var i = 0; i < $scope.data.length; i++) {
+            $scope.data[i].amount += Math.random() * 100;
+        }
+    }
+});
+    
+// wijmo grid directive
+app.directive("wijGrid", [ "$rootScope", "wijUtil", function ($rootScope, wijUtil) {
+    return {
+        restrict: "E",
+        replace: true,
+        transclude: true,
+        template: "<table ng-transclude/>",
+        scope: {
+            data: "=",          // List of items to bind to.
+            allowEditing: "@",  // Whether user can edit the grid.
+            afterCellEdit: "&", // Event that fires after cell edits.
+            allowWrapping: "@", // Whether text in grid cells should be allowed to wrap within cells.
+            frozenColumns: "@"  // Number of non-scrollable columns
+        },
+        controller: ["$scope", function ($scope) {
+            $scope.columns = [];
+            this.addColumn = function (column) {
+                $scope.columns.push(column);
+            }
+        }],
+        link: function (scope, element, attrs) {
+
+            // listen to changes in attributes and update the control
+            var arr = ["allowEditing", "allowWrapping", "frozenColumns"];
+            wijUtil.watchScope(scope, arr, updateControl, true, false);
+
+            // update the control when column properties are updated
+            var arr = ["binding", "header", "format", "width", "aggregate", "group", "groupHeader"];
+            for (var i = 0; i < scope.columns.count; i++) {
+                wijUtil.watchScope(scope.columns[i], arr, updateControl, true, false);
+            }
+            
+            // update the control on data changes
+            scope.$watch("data", function () {
+                var grid = element.data().wijgrid;
+                if (grid != null) {
+                    grid.ensureControl(false);
+                }
+            }, true);
+
+            // update the control
+            function updateControl() {
+
+                // destroy old widget if any
+                if (element.data().wijgrid) {
+                    element.data().wijgrid.destroy();
+                }
+
+                // get grid data
+                var data = scope.data;
+
+                // get grid columns
+                var columns = getColumns();
+
+                // create widget
+                var options = {
+                    
+                    // specify data source, columns
+                    data: data,
+                    columns: columns,
+
+                    // set frozen columns
+                    staticColumnIndex: scope.frozenColumns ? scope.frozenColumns * 1 - 1 : -1,
+
+                    // customize cells
+                    cellStyleFormatter: function (args) {
+
+                        // add some left padding
+                        args.$cell.css("padding-left", "4px");
+
+                        // honor word-wrap attribute
+                        if (!scope.wordWrap || scope.$eval(scope.wordWrap) == false) {
+                            args.$cell.css("white-space", "nowrap");
+                        }
+
+                        // use bold in group headers and column headers
+                        if ((args.row.type & 17) != 0) { // 1: column header, 16: group row
+                            args.$cell.css("font-weight", "bold");
+                        }
+                    },
+
+                    // use header style for group headers
+                    rowStyleFormatter: function (args) {
+                        if ((args.type & 16) != 0) { // 16: group row
+                            args.$rows.addClass("ui-widget-header");
+                        }
+                    },
+
+                    // default settings for this directive
+                    columnsAutogenerationMode: columns && columns.length > 0 ? "none" : "append",
+                    allowEditing: scope.allowEditing ? scope.$eval(scope.allowEditing) : false,
+                    allowSorting: true,
+                    allowColSizing: true,
+                    allowColMoving: true,
+                    scrollMode: "auto",
+                    allowKeyboardNavigation: true,
+                    ensureColumnsPxWidth: true,
+                    highlightCurrentCell: true
+                };
+
+                // create the grid
+                element.wijgrid(options);
+                
+                // connect event handlers
+                if (scope.afterCellEdit) {
+                    element.bind("wijgridaftercelledit", function (e, args) {
+                        if (!scope.$$phase) scope.$apply("data");
+                        scope.afterCellEdit({ e: e, args: args });
+                    });
+                }
+            }
+
+            function getColumns() {
+                var cols = [];
+                if (scope.columns) {
+                    for (var i = 0; i < scope.columns.length; i++) {
+                        var col = {};
+                        var c = scope.columns[i];
+                        col.dataKey = c.binding,
+                        col.headerText = c.header
+                            ? c.header
+                            : c.binding.charAt(0).toUpperCase() + c.binding.slice(1);
+                        if (c.format) {
+                            col.dataFormatString = c.format;
+                            col.dataType = "number";
+                        }
+                        if (c.width) col.width = c.width * 1;
+                        if (c.aggregate) col.aggregate = c.aggregate;
+                        if (c.group) {
+                            col.groupInfo = {
+                                position: "header", 
+                                outlineMode: c.group.toLowerCase() == "startCollapsed" ? "startCollapsed" : "startExpanded",
+                                headerText: c.groupHeader ? c.groupHeader : "{1}: {0}"
+                            }
+                        }
+                        cols.push(col);
+                    }
+                }
+                return cols;
+            }
+        }
+    }
+}]);
+
+// ** wij-grid-column directive
+app.directive("wijGridColumn", function () {
+    return {
+        require: "^wijGrid",
+        restrict: "E",
+        replace: true,
+        template: "<div/>",
+        scope: {
+            binding: "@",       // Property shown in this column.
+            header: "@",        // Column header content.
+            format: "@",        // Format used to display numeric values in this column.
+            width: "@",         // Column width in pixels.
+            aggregate: "@",     // Aggregate to display in group header rows for this column ("none", "count", "sum", "average", "min", "max", "std", "stdPop", "var", "varPop", or "custom").
+            group: "@",         // Whether items should be grouped by the values in this column.
+            groupHeader: "@"    // Text to display in the group header rows ("{0}", "{1}", and "{2}" are replaced with the value being grouped on, the column header, and the aggregate value).
+        },
+        link: function (scope, element, attrs, wijGrid) {
+            wijGrid.addColumn(scope);
+        }
+    }
+});
+
+// utilities shared by all directives
+app.factory("wijUtil", function () {
+    return {
+
+        // watch for changes in scope variables, call update function when all have been initialized
+        watchScope: function (scope, props, updateFn, updateOnTimer, updateOnResize) {
+
+            // watch all variables in the props array, keep count of changes and start
+            // calling the update function fn only after all variables have been initialized.
+            var cnt = props.length;
+            angular.forEach(props, function (prop) {
+                scope.$watch(prop, function (value) {
+
+                    // decrement count; when this reaches zero, all scope variables are initialized
+                    cnt--;
+
+                    // call update function when count reaches zero (all properties have been initialized)
+                    // or when the count is negative and the value is non-null.
+                    if (cnt == 0 || (cnt < 0 && value)) {
+                        console.log(prop + " changing to " + value);
+                        if (updateOnTimer) {
+                            if (scope.updateTimeout) clearTimeout(scope.updateTimeout);
+                            scope.updateTimeout = setTimeout(updateFn, 50);
+                        } else {
+                            updateFn();
+                        }
+                    }
+                }, true)
+            });
+
+            // call update function when user resizes the window 
+            // so the control can resize itself if it wants to.
+            if (updateOnResize) {
+                $(window).resize(function () {
+                    if (scope.resizeTimeout) clearTimeout(scope.resizeTimeout);
+                    scope.resizeTimeout = setTimeout(updateFn, 100);
+                })
+            }
+        }
+    }
+});
+
+//]]>  
+
+</script>
+
+
+</head>
+<body ng-app="app" ng-controller="myCtrl">
+
+<h3>Wijmo Grid</h3>
+
+<p>Here is an editable grid:</p>
+
+<!-- NOTE: cellEdited attribute must include list of parameters! -->
+<wij-grid data="data" allow-editing="true" after-cell-edit="cellEdited(e, args)" >
+    <wij-grid-column binding="country" width="100" group="true"></wij-grid-column>
+    <wij-grid-column binding="product" width="140" ></wij-grid-column>
+    <wij-grid-column binding="amount" width="100" format="c2" aggregate="sum" ></wij-grid-column>
+</wij-grid>
+
+<p></p>
+<p>Here is the same data as a plain HTML table:</p>
+
+<table class="table table-condensed table-hover">
+    <thead>
+        <th>Country</th>
+        <th>Product</th>
+        <th>Amount</th>
+    </thead>
+    <tr ng-repeat="item in data | orderBy:'country'">
+        <td>{{item.country}}</td>
+        <td>{{item.product}}</td>
+        <td>{{item.amount | currency}}</td>
+    </tr>
+</table>    
+
+<button ng-click="changeAmount()">Change Amount</button>    
+    
+</body>
+</html>
+
