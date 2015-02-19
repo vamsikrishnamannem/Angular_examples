@@ -1,0 +1,267 @@
+<html>
+<head>
+  <title>Wijmo Chart - Angular Directive Example</title>
+
+  <!-- jQuery -->
+  <script type='text/javascript' src='http://code.jquery.com/jquery-1.8.3.js'></script>
+  <script type="text/javascript" src="http://code.jquery.com/ui/1.9.2/jquery-ui.js"></script>
+  <link rel="stylesheet" type="text/css" href="http://code.jquery.com/ui/1.9.2/themes/base/jquery-ui.css">
+  
+  <!-- Angular -->
+  <script type='text/javascript' src="http://code.angularjs.org/angular-1.0.1.js"></script>
+
+  <!-- Wijmo -->
+  <link rel="stylesheet" type="text/css" href="http://cdn.wijmo.com/themes/metro/jquery-wijmo.css">
+  <link rel="stylesheet" type="text/css" href="http://cdn.wijmo.com/jquery.wijmo-complete.all.2.3.1.min.css">
+  <script type='text/javascript' src="http://cdn.wijmo.com/jquery.wijmo-open.all.2.3.1.min.js"></script>
+  <script type='text/javascript' src="http://cdn.wijmo.com/jquery.wijmo-complete.all.2.3.1.min.js"></script>
+
+  <!-- Bootstrap -->
+  <link rel="stylesheet" type="text/css" href="http://netdna.bootstrapcdn.com/twitter-bootstrap/2.3.1/css/bootstrap-combined.min.css">
+    
+  <!-- match Wijmo-Bootstrap styles -->  
+  <style type='text/css'>
+    .ui-widget { font-family:'Helvetica Neue', Helvetica, Arial, sans-serif; }
+    .ui-widget input, .ui-widget select, .ui-widget textarea, .ui-widget button { font-family:'Helvetica Neue', Helvetica, Arial, sans-serif; }
+    .wijmo-wijmenu .wijmo-wijmenu-parent .wijmo-wijmenu-child { width: auto; min-width: 150px; }
+    .wijmo-wijtooltip { background-color: #fff9d1; }
+  </style>
+
+  <!-- App code (in real apps, this would be placed in separate files) -->
+  <script type='text/javascript'>//<![CDATA[ 
+
+var app = angular.module("app", []);
+
+app.controller("appCtrl", function ($scope) {
+
+    // generate the data
+    $scope.generateData = function () {
+
+        // generate some random points
+        $scope.data = [];
+        var a = Math.random() * 10 - 5;
+        var b = Math.random() * 10 - 5;
+        for (var i = 0; i < 250; i++) {
+            var x = Math.random() * 100;
+            var y = a + b * x;
+            for (var j = 0; j < 10; j++)
+                y += Math.random() * 40 - 20;
+            $scope.data.push({ x: x, y: y });
+        }
+
+        // compute linear regression
+        $scope.reg = linReg($scope.data, "x", "y");
+    };
+
+    // initialize the data
+    $scope.generateData();
+    
+    // allow expressions to use javaScript Math functions
+    $scope.Math = window.Math;
+
+    // calculates a linear regression on the values provided
+    function linReg(data, xProp, yProp) {
+
+        // compute sums and sums of squares
+        var n = 0, sx = 0, sy = 0, sxx = 0, syy = 0, sxy = 0;
+        for (var i = 0; i < data.length; i++) {
+            var x = data[i][xProp];
+            var y = data[i][yProp];
+            n++;
+            sx += x;
+            sy += y;
+            sxx += x * x;
+            syy += y * y;
+            sxy += x * y;
+        }
+
+        // return regression coefficients and r2
+        var b = (n * sxy - sx * sy) / (n * sxx - sx * sx);
+        var a = sy / n - sx / n * b;  
+        var r2 = (n * sxy - sx * sy) * (n * sxy - sx * sy) / ((n * sxx - sx * sx) * (n * syy - sy * sy)); 
+        return { a: a, b: b, r2: r2 };
+    }
+});
+
+app.directive("appChart", function (appUtil) {
+    return {
+        restrict: "E",
+        replace: true,
+        scope: {
+            data: "=",      // array that contains the data for the chart.
+            x: "@",         // property that contains the X values.
+            y: "@",         // property that contains the Y values.
+            regParms: "=",  // regression parameters (a and b coefficients)
+            color: "@"      // color for the data series.
+        },
+        template:
+            "<div></div>",
+        link: function (scope, element, attrs) {
+
+            // watch for changes in the scope variables
+            appUtil.watchScope(scope, ["x", "y", "color"], updateChartControl, true, true);
+
+            // update chart data when data changes
+            scope.$watch("data", updateChartData);
+
+            // create/update the chart control
+            function updateChartControl(prop, val) {
+
+                // use element font in the chart
+                var fontFamily = element.css("fontFamily");
+                var fontSize = element.css("fontSize");
+                var textStyle = { "font-family": fontFamily, "font-size": fontSize, "font-weight": "normal", fill: "black" };
+
+                // set default values
+                var color = scope.color ? scope.color : "red";
+
+                // build options
+                var options = {
+                    seriesStyles: [
+                        { stroke: color, "stroke-width": 0 },
+                        { stroke: "black", "stroke-width": 1, "stroke-opacity": .5 }
+                    ],
+                    seriesHoverStyles: [
+                        { stroke: color, "stroke-width": 0 },
+                        { stroke: "black", "stroke-width": 2, "stroke-opacity": 1 }
+                    ],
+                    legend: { visible: false },
+                    showChartLabels: false,
+                    animation: { enabled: false },
+                    seriesTransition: { enabled: false },
+                    axis: {
+                        x: { labels: { style: textStyle }, annoFormatString: "n0" },
+                        y: { labels: { style: textStyle }, annoFormatString: "n0" }
+                    },
+                    textStyle: textStyle
+                };
+
+                // create the chart
+                element.wijlinechart(options);
+
+                // go update the chart data
+                updateChartData();
+            }
+
+            // update the data in the control
+            function updateChartData() {
+                if (element.data().wijlinechart && scope.data) {
+                    var list = [];
+
+                    // prepare data series
+                    var data = scope.data;
+                    var xmin = data[0][scope.x];
+                    var xmax = data[0][scope.x];
+                    if (data && scope.x && scope.y) {
+                        var ds = {
+                            label: "Data Series",
+                            data: { x: [], y: [] },
+                            markers: { visible: true, type: "circle" }
+                        };
+                        for (var i = 0; i < data.length; i++) {
+                            ds.data.x.push(data[i][scope.x]);
+                            ds.data.y.push(data[i][scope.y]);
+                            xmin = Math.min(xmin, data[i][scope.x]);
+                            xmax = Math.max(xmax, data[i][scope.x]);
+                        }
+                        list.push(ds);
+                    }
+
+                    // prepare regression series
+                    if (scope.regParms) {
+                        var a = scope.regParms.a;
+                        var b = scope.regParms.b;
+                        var ds = {
+                            label: "Regression",
+                            data: {
+                                x: [xmin, xmax],
+                                y: [a + b * xmin, a + b * xmax],
+                                markerType: "none"
+                            }
+                        };
+                        list.push(ds);
+                    }
+
+                    // show the new series list
+                    element.wijlinechart({ seriesList: list });
+                }
+            }
+        }
+    }
+});
+
+// utilities shared by all directives
+app.factory("appUtil", function () {
+    return {
+
+        // watch for changes in scope variables, call update function when all have been initialized
+        watchScope: function (scope, props, updateFn, updateOnTimer, updateOnResize) {
+
+            // watch all variables in the props array, keep count of changes and start
+            // calling the update function fn only after all variables have been initialized.
+            var cnt = props.length;
+            angular.forEach(props, function (prop) {
+                scope.$watch(prop, function (value) {
+
+                    // decrement count; when this reaches zero, all scope variables are initialized
+                    cnt--;
+
+                    // call update function when count reaches zero (all properties have been initialized)
+                    // or when the count is negative and the value is non-null.
+                    if (cnt == 0 || (cnt < 0 && value)) {
+                        console.log(prop + " changing to " + value);
+                        if (updateOnTimer) {
+                            if (scope.updateTimeout) clearTimeout(scope.updateTimeout);
+                            scope.updateTimeout = setTimeout(updateFn, 50);
+                        } else {
+                            updateFn(prop, value);
+                        }
+                    }
+                })
+            });
+
+            // call update function when user resizes the window 
+            // so the control can resize itself if it wants to.
+            if (updateOnResize) {
+                $(window).resize(function () {
+                    if (scope.resizeTimeout) clearTimeout(scope.resizeTimeout);
+                    scope.resizeTimeout = setTimeout(updateFn, 100);
+                })
+            }
+        }
+    }
+});
+
+//]]>  
+
+</script>
+
+
+</head>
+<body ng-app="app" ng-controller="appCtrl">
+
+<h3>Wijmo Line Chart</h3>
+
+<p>This chart directive includes a linear regression with {{data.length}} points:</p>
+
+<app-chart 
+    data="data" x="x" y="y" 
+    reg-parms="reg"
+    color="blue" >
+</app-chart>
+
+<p>The linear regression equation is:
+  <b>Y =
+    {{reg.a | number:2}}
+    <span ng-show="reg.b >= 0"> + </span>
+    <span ng-show="reg.b < 0"> - </span>
+    {{Math.abs(reg.b) | number:2}} * X</b></p>
+<p>The coefficient of determination is:
+  <b>r<sup>2</sup> = 
+    {{reg.r2 | number:2}}</b></p>
+    
+<button ng-click="generateData()">Randomize Data</button>
+
+</body>
+</html>
+
