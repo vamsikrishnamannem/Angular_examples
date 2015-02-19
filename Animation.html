@@ -1,0 +1,136 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Wijmo Grid - Angular Directive Example</title>
+  <style type="text/css">
+  	.boundingBox {
+    width: 600px;
+    height: 600px;
+    background-color: #333333;
+    margin:20px;
+}
+
+
+.circle {
+    display:block;
+    position:absolute;
+    height: 20px;
+    width: 20px;
+    background-color: #999;
+    -moz-border-radius: 15px;
+    -webkit-border-radius: 15px;
+    border-radius: 15px;
+}
+
+.box {
+    display:block;
+    position:absolute;
+    height: 20px;
+    width: 20px;
+
+}
+
+#controls {
+    position: absolute;
+    top: 620px;
+}
+  </style>
+ </head>
+<body>
+    <div ng-app="animateApp" ng-controller="AnimateCtrl">
+        <div class="boundingBox">
+           <div class="circle"
+                ng-repeat="shape in shapes"
+                animate="shape"> </div>
+        </div>
+    </div>
+    <script type="text/javascript" src='https://code.angularjs.org/angular-1.0.0rc5.min.js'></script>
+   <script type="text/javascript">
+   var module = angular
+        .module('animateApp', [])
+        .directive('animate', function($defer) {
+            return {
+                restrict: 'A',
+                link: function(scope, element, attrs)
+                {
+                    var target = attrs.animate;
+                    scope.$watch( 'shape', function(val) {
+                        var changes = {
+                            left : val.x + 'px',
+                            top  : val.y + 'px',
+                            backgroundColor : val.color
+                        }
+
+                        element.css( changes );
+                    }, true );
+                }
+            };
+        });
+
+function animator(shapes, $defer) {
+    (function tick() {
+        var i;
+        var now = new Date().getTime();
+        var maxX      = 600;
+        var maxY      = 600;
+        var now = new Date().getTime();
+
+         for (i = 0; i < shapes.length; i++) {
+           var shape = shapes[i];
+           var elapsed = (shape.timestamp || now) - now;
+
+           shape.timestamp = now;
+           shape.x += elapsed * shape.velX / 1000;
+           shape.y += elapsed * shape.velY / 1000;
+
+           if (shape.x > maxX) {
+               shape.x = 2 * maxX - shape.x;
+               shape.velX *= -1;
+           }
+           if (shape.x < 30) {
+               shape.x = 30;
+               shape.velX *= -1;
+           }
+
+           if (shape.y > maxY) {
+               shape.y = 2 * maxY - shape.y;
+               shape.velY *= -1;
+           }
+           if (shape.y < 20) {
+               shape.y = 20;
+               shape.velY *= -1;
+           }
+         }
+
+         $defer(tick, 30);
+    })();
+}
+
+function AnimateCtrl($scope, $defer) {
+
+    function buildShape () {
+        var maxVelocity = 200;
+        return {
+            color     : '#' + (Math.random() * 0xFFFFFF << 0).toString(16),
+            x         : Math.min(380,Math.max(20,(Math.random() * 380))),
+            y         : Math.min(180,Math.max(20,(Math.random() * 180))),
+
+            velX    : (Math.random() * maxVelocity),
+            velY    : (Math.random() * maxVelocity)
+        };
+    };
+
+    // Publish list of shapes on the $scope/presentationModel
+    // Then populate the list with 100 shapes randomized in position
+    // and color
+    $scope.shapes   = [];
+    for (i = 0; i < 100; i++) {
+        $scope.shapes.push( buildShape() );
+    }
+
+    // Start timer-based, changes of the shape properties
+    animator( $scope.shapes, $defer );
+}
+</script>
+</body>
+</html>
